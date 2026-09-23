@@ -2,31 +2,73 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>James Taylor Simulator</title>
 <style>
-  html,body{margin:0;padding:0;height:100%;background:#0e1220;display:flex;align-items:center;justify-content:center;font-family:'Segoe UI',Arial,sans-serif;overflow:hidden}
-  #wrap{width:min(97vw,1000px)}
-  canvas{width:100%;height:auto;display:block;border-radius:12px;box-shadow:0 14px 50px rgba(0,0,0,.65);cursor:pointer}
+  html,body{margin:0;padding:0;height:100%;background:#0e1220;overflow:hidden;
+    font-family:'Segoe UI',Arial,sans-serif;-webkit-tap-highlight-color:transparent}
+  #wrap{width:100%;height:100%}
+  canvas{width:100%;height:100%;display:block;touch-action:none;
+    user-select:none;-webkit-user-select:none}
 </style>
 </head>
 <body>
-<div id="wrap"><canvas id="game" width="960" height="540"></canvas></div>
+<div id="wrap"><canvas id="game"></canvas></div>
 <script>
 'use strict';
+window.addEventListener('error',function(e){
+  var d=document.getElementById('jserr');
+  if(!d){d=document.createElement('div');d.id='jserr';
+    d.style.cssText='position:fixed;top:0;left:0;right:0;z-index:999;background:#b00;color:#fff;font:12px monospace;padding:4px;white-space:pre-wrap';
+    document.body.appendChild(d);}
+  d.textContent+='ERR: '+e.message+' @ line '+e.lineno+':'+e.colno+'\n';
+});
 const canvas=document.getElementById('game');
-const ctx=canvas.getContext('2d');
-const W=canvas.width,H=canvas.height;
+const realCtx=canvas.getContext('2d');
+let W=0,H=0,S=1,DPR=1,PORTRAIT=false;
+const TOUCH=(navigator.maxTouchPoints>0)||(window.matchMedia&&matchMedia('(pointer:coarse)').matches);
+
+let BASE_X=0,CREST_X=0,BASE_Y=0,CREST_Y=0,FAR_Y=0,CAR_START=0;
+
+const boundCache=new Map();
+const ctx=new Proxy(realCtx,{
+  get(t,p){
+    const v=t[p];
+    if(typeof v!=='function')return v;
+    if(!boundCache.has(p))boundCache.set(p,v.bind(t));
+    return boundCache.get(p);
+  },
+  set(t,p,v){
+    if(p==='font'&&typeof v==='string')
+      v=v.replace(/(\d+(?:\.\d+)?)px/g,(m,n)=>Math.round(parseFloat(n)*S)+'px');
+    t[p]=v;
+    return true;
+  }
+});
+
+function resize(){
+  DPR=Math.min(window.devicePixelRatio||1,2);
+  W=window.innerWidth;H=window.innerHeight;
+  canvas.width=Math.round(W*DPR);canvas.height=Math.round(H*DPR);
+  canvas.style.width=W+'px';canvas.style.height=H+'px';
+  PORTRAIT=H>W;
+  S=Math.min(Math.max(Math.min(W,H)/(PORTRAIT?560:540),0.62),1.5);
+  BASE_X=W*0.08;
+  CREST_X=PORTRAIT?W*0.74:W*0.78;
+  BASE_Y=H*0.84;
+  CREST_Y=PORTRAIT?H*0.30:H*0.34;
+  FAR_Y=H*0.60;
+  CAR_START=PORTRAIT?Math.max(W*0.34,150):W*0.17;
+}
 
 const TOTAL_PUSHES=7,MAX_HEARTS=3;
-const BASE_X=W*0.10,CREST_X=W*0.78,BASE_Y=H*0.86,CREST_Y=H*0.34,FAR_Y=H*0.60;
 
 const G={
   mode:'title',modeT:0,successes:0,hearts:3,carP:0,carFrom:0,carTo:0,
   animT:0,animKind:'',qte:null,winT:0,winSpeed:70,carDriveX:0,carGone:false,
   confetti:[],puffs:[],texts:[],wheelRot:0,walkPh:0,shake:0,flash:0,
   snapPop:-1,screaming:false,snapPlayed:false,screamPlayed:false,puffTimer:0,
-  jamesPose:'idle'
+  line1Shown:false,line2Shown:false,jamesPose:'idle'
 };
 
 const clouds=[
@@ -45,7 +87,7 @@ function hillY(x){
   return CREST_Y+(FAR_Y-CREST_Y)*Math.pow(t2,1.3);
 }
 function hillSlope(x){return Math.atan2(hillY(x+3)-hillY(x-3),6);}
-function carXAt(p){return lerp(W*0.17,CREST_X-26,p);}
+function carXAt(p){return lerp(CAR_START,CREST_X-26,p);}
 function carCenterX(){
   if(G.mode==='victory'||G.carGone)return null;
   if(G.mode==='win')return G.carDriveX;
@@ -193,6 +235,7 @@ function resetGame(){
   G.confetti=[];G.puffs=[];G.texts=[];G.wheelRot=0;G.walkPh=0;
   G.shake=0;G.flash=0;G.snapPop=-1;G.screaming=false;
   G.snapPlayed=false;G.screamPlayed=false;G.jamesPose='idle';
+  G.line1Shown=false;G.line2Shown=false;
 }
 function startQTE(){
   const r=G.successes;
@@ -232,7 +275,7 @@ function failQTE(msg){
   G.qte.resolved=true;
   G.hearts--;
   playStrain();
-  addText(msg||'MISS!',W/2,H-140,'#ff5a4e',28);
+  addText(msg||'MISS!',W/2,H-170,'#ff5a4e',28);
   G.shake=7;
   if(G.hearts<=0){beginSnap();}
   else{
@@ -364,16 +407,29 @@ function drawHeart(cx,cy,s,filled){
   ctx.strokeStyle=filled?'#8e1f2c':'rgba(255,255,255,0.5)';
   ctx.lineWidth=2;ctx.stroke();
 }
+function wrapText(str,maxW){
+  const words=String(str).split(' ');
+  const lines=[];
+  let cur='';
+  words.forEach(wd=>{
+    const test=cur?cur+' '+wd:wd;
+    if(ctx.measureText(test).width>maxW&&cur){lines.push(cur);cur=wd;}
+    else cur=test;
+  });
+  if(cur)lines.push(cur);
+  return lines;
+}
 
 function drawSky(t){
   const g=ctx.createLinearGradient(0,0,0,H*0.8);
   g.addColorStop(0,'#7ec4f7');g.addColorStop(0.7,'#c9e6f5');g.addColorStop(1,'#ffe8c2');
   ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
-  const sg=ctx.createRadialGradient(110,90,10,110,90,90);
+  const sx=Math.max(90,W*0.11),sy=Math.max(80,H*0.10);
+  const sg=ctx.createRadialGradient(sx,sy,10,sx,sy,90);
   sg.addColorStop(0,'rgba(255,236,150,0.95)');sg.addColorStop(1,'rgba(255,236,150,0)');
-  ctx.fillStyle=sg;ctx.beginPath();ctx.arc(110,90,90,0,7);ctx.fill();
-  ctx.fillStyle='#ffdf6b';ctx.beginPath();ctx.arc(110,90,34,0,7);ctx.fill();
-  ctx.save();ctx.translate(110,90);ctx.rotate(t*0.08);
+  ctx.fillStyle=sg;ctx.beginPath();ctx.arc(sx,sy,90,0,7);ctx.fill();
+  ctx.fillStyle='#ffdf6b';ctx.beginPath();ctx.arc(sx,sy,34,0,7);ctx.fill();
+  ctx.save();ctx.translate(sx,sy);ctx.rotate(t*0.08);
   ctx.strokeStyle='rgba(255,223,107,0.6)';ctx.lineWidth=3;
   for(let i=0;i<10;i++){
     const a=i*Math.PI/5;
@@ -645,7 +701,7 @@ function drawHUD(){
 }
 function drawQTE(t){
   const q=G.qte;if(!q)return;
-  const qw=460,qh=30,qx=(W-qw)/2,qy=H-96;
+  const qw=Math.min(460,W-36),qh=30,qx=(W-qw)/2,qy=H-(PORTRAIT?130:96);
   ctx.fillStyle='rgba(10,14,24,0.78)';
   rr(qx-8,qy-8,qw+16,qh+16,12);ctx.fill();
   ctx.strokeStyle='rgba(255,255,255,0.35)';ctx.lineWidth=2;ctx.stroke();
@@ -667,7 +723,7 @@ function drawQTE(t){
   ctx.textAlign='center';
   ctx.font="800 17px 'Segoe UI',Arial,sans-serif";
   ctx.fillStyle=`rgba(255,255,255,${a})`;
-  ctx.fillText('HIT  SPACE  IN  THE  GREEN',W/2,qy-26);
+  ctx.fillText(TOUCH?'TAP  IN  THE  GREEN':'HIT  SPACE  IN  THE  GREEN',W/2,qy-26);
   ctx.font="600 12px 'Segoe UI',Arial,sans-serif";
   ctx.fillStyle='rgba(255,255,255,0.6)';
   ctx.fillText('a miss strains the tendon',W/2,qy+qh+26);
@@ -698,13 +754,12 @@ function drawSnap(t){
     ctx.translate(jx-16,gy-120);
     const s=1+0.06*Math.sin(t*28);
     ctx.scale(s,s);ctx.rotate(-0.08);
-    const txt='AAAAHHHHH!!!';
     ctx.font="900 40px 'Segoe UI',Arial,sans-serif";
     ctx.textAlign='center';
     ctx.lineWidth=7;ctx.strokeStyle='rgba(0,0,0,0.75)';
-    ctx.strokeText(txt,0,0);
+    ctx.strokeText('AAAAHHHHH!!!',0,0);
     ctx.fillStyle='#ff4d5e';
-    ctx.fillText(txt,0,0);
+    ctx.fillText('AAAAHHHHH!!!',0,0);
     ctx.restore();
   }
 }
@@ -742,31 +797,44 @@ function drawBubble(lines,cx,cy,tx,ty,big){
   lines.forEach((l,i)=>ctx.fillText(l,cx,y+pad+fs*0.72+i*lh));
 }
 const playBtn={hover:false};
-function playBtnRect(){return {x:W/2-118,y:346,w:236,h:68};}
+function playBtnRect(){
+  const w=Math.min(260*S+40,W-64),h=Math.max(56,68*S);
+  return {x:W/2-w/2,y:H*0.60-h/2,w,h};
+}
 function drawTitle(t){
   const grad=ctx.createLinearGradient(0,0,0,H);
   grad.addColorStop(0,'rgba(8,11,20,0.5)');
   grad.addColorStop(1,'rgba(8,11,20,0.78)');
   ctx.fillStyle=grad;ctx.fillRect(0,0,W,H);
   const k=easeOutBack(clamp(G.modeT/0.7,0.001,1));
+  const Sm=Math.max(S,0.8);
   ctx.save();
   ctx.translate(W/2,(1-k)*-70);
   ctx.textAlign='center';ctx.lineJoin='round';
+  const ty=Math.max(84,H*0.20);
   ctx.font="900 64px 'Segoe UI',Arial,sans-serif";
   ctx.lineWidth=11;ctx.strokeStyle='rgba(0,0,0,0.8)';
-  ctx.strokeText('JAMES TAYLOR',0,140);
-  const tg=ctx.createLinearGradient(0,92,0,148);
+  ctx.strokeText('JAMES TAYLOR',0,ty);
+  const tg=ctx.createLinearGradient(0,ty-48,0,ty+8);
   tg.addColorStop(0,'#ffe27a');tg.addColorStop(1,'#ffb52e');
-  ctx.fillStyle=tg;ctx.fillText('JAMES TAYLOR',0,140);
+  ctx.fillStyle=tg;ctx.fillText('JAMES TAYLOR',0,ty);
   ctx.font="900 50px 'Segoe UI',Arial,sans-serif";
-  ctx.lineWidth=9;ctx.strokeText('SIMULATOR',0,196);
-  ctx.fillStyle='#f4f7fb';ctx.fillText('SIMULATOR',0,196);
+  ctx.lineWidth=9;ctx.strokeText('SIMULATOR',0,ty+56*Sm);
+  ctx.fillStyle='#f4f7fb';ctx.fillText('SIMULATOR',0,ty+56*Sm);
   ctx.font="600 19px 'Segoe UI',Arial,sans-serif";
   ctx.fillStyle='#dbe4ef';
-  ctx.fillText('One gentle folk legend. One steep hill. One little old lady who needs a push.',0,238);
+  let sy=ty+56*Sm+46*Sm;
+  const sub=W<640
+    ?['One gentle folk legend. One steep hill.','One little old lady who needs a push.']
+    :['One gentle folk legend. One steep hill. One little old lady who needs a push.'];
+  sub.forEach(l=>{ctx.fillText(l,0,sy);sy+=26;});
   ctx.font="500 15px 'Segoe UI',Arial,sans-serif";
   ctx.fillStyle='#9fb0c6';
-  ctx.fillText('Time your SPACE presses to heave her car to the crest. Three misses and... something snaps.',0,266);
+  const i1=TOUCH
+    ?'Tap when the needle hits the green — 7 heaves to reach the crest.'
+    :'Hit SPACE when the needle hits the green — 7 heaves to reach the crest.';
+  const instr=W<640?[i1,'Three misses and... something snaps.']:[i1+' Three misses and... something snaps.'];
+  instr.forEach(l=>{ctx.fillText(l,0,sy+6);sy+=24;});
   ctx.restore();
   const b=playBtnRect();
   const hov=playBtn.hover;
@@ -790,14 +858,16 @@ function drawTitle(t){
   ctx.textAlign='center';
   ctx.font="600 14px 'Segoe UI',Arial,sans-serif";
   ctx.fillStyle='rgba(255,255,255,0.55)';
-  ctx.fillText('SPACE also works  •  M to mute',W/2,456);
+  ctx.fillText(TOUCH?'Best with sound on':'SPACE also works  •  M to mute',W/2,b.y+b.h+44);
   ctx.font="500 12px 'Segoe UI',Arial,sans-serif";
   ctx.fillStyle='rgba(255,255,255,0.32)';
-  ctx.fillText('No actual James Taylors were harmed. The granny is fine too.',W/2,480);
+  ctx.fillText('No actual James Taylors were harmed. The granny is fine too.',W/2,b.y+b.h+68);
+}
+function drawWrapped(str,cx,y,maxW,lh){
+  wrapText(str,maxW).forEach(l=>{ctx.fillText(l,cx,y);y+=lh;});
+  return y;
 }
 function drawVictory(t){
-  const w=680,h=300;
-  const [x,y]=drawPanel(w,h);
   G.confetti.forEach(p=>{
     ctx.save();
     ctx.translate(p.x,p.y);ctx.rotate(p.rot);
@@ -805,52 +875,83 @@ function drawVictory(t){
     ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);
     ctx.restore();
   });
+  const w=Math.min(680,W-24),h=PORTRAIT?360:300;
+  const [x,y]=drawPanel(w,h);
+  const prompt=TOUCH?'TAP TO PLAY AGAIN':'PRESS SPACE TO PLAY AGAIN';
   ctx.textAlign='center';
   ctx.font="900 56px 'Segoe UI',Arial,sans-serif";
   ctx.fillStyle='#ffd93b';
-  ctx.fillText('YOU WIN!',W/2,y+78);
+  ctx.fillText('YOU WIN!',W/2,y+64);
+  let yy=y+108;
   ctx.font="600 20px 'Segoe UI',Arial,sans-serif";
   ctx.fillStyle='#e8eef7';
-  ctx.fillText('The little old lady toots her horn, asks for his number...',W/2,y+126);
-  ctx.fillStyle='#c9d4e3';
+  yy=drawWrapped('The little old lady toots her horn, asks for his number...',W/2,yy,w-56,26);
   ctx.font="500 17px 'Segoe UI',Arial,sans-serif";
-  ctx.fillText("James respectfully declined. Tendons: fully intact.",W/2,y+158);
-  ctx.fillStyle='#8a94a8';
-  ctx.font="600 14px 'Segoe UI',Arial,sans-serif";
-  ctx.fillText('She took it gracefully. Bridge club awaits.',W/2,y+188);  const a=0.55+0.45*Math.sin(t*4);
-  ctx.font="800 22px 'Segoe UI',Arial,sans-serif";
-  ctx.fillStyle=`rgba(255,255,255,${a})`;
-  ctx.fillText('PRESS SPACE TO PLAY AGAIN',W/2,y+240);
-}
-function drawLoseOverlay(t){
-  const w=700,h=320;
-  const [x,y]=drawPanel(w,h);
-  ctx.textAlign='center';
-  ctx.font="900 54px 'Segoe UI',Arial,sans-serif";
-  ctx.fillStyle='#ff4d5e';
-  ctx.fillText('GAME OVER',W/2,y+76);
-  ctx.font="600 20px 'Segoe UI',Arial,sans-serif";
-  ctx.fillStyle='#e8eef7';
-  ctx.fillText("James' Achilles tendon snapped like a cheap guitar string.",W/2,y+126);
   ctx.fillStyle='#c9d4e3';
-  ctx.font="500 17px 'Segoe UI',Arial,sans-serif";
-  ctx.fillText('The car remains. The scream echoes still.',W/2,y+158);
-  ctx.fillStyle='#8a94a8';
+  yy=drawWrapped('James respectfully declined. Tendons: fully intact.',W/2,yy+6,w-56,24);
   ctx.font="600 14px 'Segoe UI',Arial,sans-serif";
-  ctx.fillText('R.I.P._push_season.mp3',W/2,y+190);
+  ctx.fillStyle='#8a94a8';
+  yy=drawWrapped('She took it gracefully. Bridge club awaits.',W/2,yy+4,w-56,20);
   const a=0.55+0.45*Math.sin(t*4);
   ctx.font="800 22px 'Segoe UI',Arial,sans-serif";
   ctx.fillStyle=`rgba(255,255,255,${a})`;
-  ctx.fillText('PRESS SPACE TO TRY AGAIN',W/2,y+252);
+  ctx.fillText(prompt,W/2,y+h-44);
 }
-function drawMuteHint(){
-  ctx.font="600 12px 'Segoe UI',Arial,sans-serif";
-  ctx.textAlign='right';
-  ctx.fillStyle='rgba(255,255,255,0.45)';
-  ctx.fillText(muted?'M: unmuted':'M: mute',W-14,H-14);
+function drawLoseOverlay(t){
+  const w=Math.min(700,W-24),h=PORTRAIT?380:320;
+  const [x,y]=drawPanel(w,h);
+  const prompt=TOUCH?'TAP TO TRY AGAIN':'PRESS SPACE TO TRY AGAIN';
+  ctx.textAlign='center';
+  ctx.font="900 54px 'Segoe UI',Arial,sans-serif";
+  ctx.fillStyle='#ff4d5e';
+  ctx.fillText('GAME OVER',W/2,y+62);
+  let yy=y+106;
+  ctx.font="600 20px 'Segoe UI',Arial,sans-serif";
+  ctx.fillStyle='#e8eef7';
+  yy=drawWrapped("James' Achilles tendon snapped like a cheap guitar string.",W/2,yy,w-56,26);
+  ctx.font="500 17px 'Segoe UI',Arial,sans-serif";
+  ctx.fillStyle='#c9d4e3';
+  yy=drawWrapped('The car remains. The scream echoes still.',W/2,yy+6,w-56,24);
+  ctx.font="600 14px 'Segoe UI',Arial,sans-serif";
+  ctx.fillStyle='#8a94a8';
+  yy=drawWrapped('R.I.P._push_season.mp3',W/2,yy+4,w-56,20);
+  const a=0.55+0.45*Math.sin(t*4);
+  ctx.font="800 22px 'Segoe UI',Arial,sans-serif";
+  ctx.fillStyle=`rgba(255,255,255,${a})`;
+  ctx.fillText(prompt,W/2,y+h-44);
+}
+const muteBtn={x:28,y:28,r:19};
+function drawMuteButton(){
+  ctx.save();
+  ctx.globalAlpha=0.85;
+  ctx.fillStyle='rgba(10,14,24,0.55)';
+  ctx.beginPath();ctx.arc(muteBtn.x,muteBtn.y,muteBtn.r,0,7);ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,0.5)';ctx.lineWidth=1.5;ctx.stroke();
+  ctx.fillStyle='#fff';
+  ctx.beginPath();
+  ctx.moveTo(muteBtn.x-9,muteBtn.y-4);
+  ctx.lineTo(muteBtn.x-4,muteBtn.y-4);
+  ctx.lineTo(muteBtn.x+2,muteBtn.y-9);
+  ctx.lineTo(muteBtn.x+2,muteBtn.y+9);
+  ctx.lineTo(muteBtn.x-4,muteBtn.y+4);
+  ctx.lineTo(muteBtn.x-9,muteBtn.y+4);
+  ctx.closePath();ctx.fill();
+  if(!muted){
+    ctx.strokeStyle='#fff';ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(muteBtn.x+3,muteBtn.y,5,-0.9,0.9);ctx.stroke();
+    ctx.beginPath();ctx.arc(muteBtn.x+3,muteBtn.y,9,-0.9,0.9);ctx.stroke();
+  }else{
+    ctx.strokeStyle='#ff5a4e';ctx.lineWidth=2.5;
+    ctx.beginPath();
+    ctx.moveTo(muteBtn.x+6,muteBtn.y-5);ctx.lineTo(muteBtn.x+14,muteBtn.y+5);
+    ctx.moveTo(muteBtn.x+14,muteBtn.y-5);ctx.lineTo(muteBtn.x+6,muteBtn.y+5);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 function draw(){
   const t=performance.now()/1000;
+  realCtx.setTransform(DPR,0,0,DPR,0,0);
   ctx.clearRect(0,0,W,H);
   ctx.save();
   if(G.shake>0.2)
@@ -866,10 +967,12 @@ function draw(){
   if(G.mode==='qte')drawQTE(t);
   if(G.mode==='snap'||G.mode==='lose')drawSnap(t);
   if(G.mode==='win'){
-    if(G.line2Shown)
-      drawBubble(["\u201CI\u2019M GAY!\u201D"],626,72,622,116,true);
-    else if(G.line1Shown)
-      drawBubble(["Hey there, sugar!","Can I get your number?"],W-195,108,W-80,182,false);
+    if(G.line2Shown){
+      const jx2=carXAt(1)-108,gy2=hillY(jx2);
+      drawBubble(["\u201CI\u2019M GAY!\u201D"],jx2+28,Math.max(gy2-166,64),jx2+24,gy2-92,true);
+    }else if(G.line1Shown){
+      drawBubble(["Hey there, sugar!","Can I get your number?"],W-125,Math.max(80,CREST_Y-130),W-40,CREST_Y+40,false);
+    }
   }
   ctx.restore();
   if(G.flash>0){
@@ -879,7 +982,7 @@ function draw(){
   if(G.mode==='title')drawTitle(t);
   if(G.mode==='victory')drawVictory(t);
   if(G.mode==='lose')drawLoseOverlay(t);
-  drawMuteHint();
+  drawMuteButton();
 }
 
 window.addEventListener('keydown',e=>{
@@ -899,21 +1002,30 @@ function inRect(x,y,b){
 }
 canvas.addEventListener('pointermove',e=>{
   const [x,y]=canvasPos(e);
-  if(G.mode==='title'){
+  if(G.mode==='title'&&!TOUCH){
     playBtn.hover=inRect(x,y,playBtnRect());
     canvas.style.cursor=playBtn.hover?'pointer':'default';
-  }else{
+  }else if(!TOUCH){
     canvas.style.cursor='default';
   }
 });
 canvas.addEventListener('pointerdown',e=>{
+  e.preventDefault();
   const [x,y]=canvasPos(e);
+  if(Math.hypot(x-muteBtn.x,y-muteBtn.y)<=muteBtn.r+6){
+    ac();toggleMute();
+    return;
+  }
   if(G.mode==='title'){
-    if(inRect(x,y,playBtnRect()))onAction();
+    if(TOUCH||inRect(x,y,playBtnRect()))onAction();
   }else{
     onAction();
   }
 });
+
+window.addEventListener('resize',resize);
+window.addEventListener('orientationchange',()=>setTimeout(resize,120));
+resize();
 
 let last=performance.now();
 function frame(ts){
