@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>Gemes Dayler Simulator</title>
+<title>Jemes Tradlor Simulator</title>
 <style>
   html,body{margin:0;padding:0;height:100%;background:#0e1220;overflow:hidden;
     font-family:'Segoe UI',Arial,sans-serif;-webkit-tap-highlight-color:transparent}
@@ -814,10 +814,10 @@ function drawTitle(t){
   const ty=Math.max(84,H*0.20);
   ctx.font="900 64px 'Segoe UI',Arial,sans-serif";
   ctx.lineWidth=11;ctx.strokeStyle='rgba(0,0,0,0.8)';
-  ctx.strokeText('Gemes Dayler',0,ty);
+  ctx.strokeText('Jemes Tradlor',0,ty);
   const tg=ctx.createLinearGradient(0,ty-48,0,ty+8);
   tg.addColorStop(0,'#ffe27a');tg.addColorStop(1,'#ffb52e');
-  ctx.fillStyle=tg;ctx.fillText('Gemes Dayler',0,ty);
+  ctx.fillStyle=tg;ctx.fillText('Jemes Tradlor',0,ty);
   ctx.font="900 50px 'Segoe UI',Arial,sans-serif";
   ctx.lineWidth=9;ctx.strokeText('SIMULATOR',0,ty+56*Sm);
   ctx.fillStyle='#f4f7fb';ctx.fillText('SIMULATOR',0,ty+56*Sm);
@@ -861,7 +861,7 @@ function drawTitle(t){
   ctx.fillText(TOUCH?'Best with sound on':'SPACE also works  •  M to mute',W/2,b.y+b.h+44);
   ctx.font="500 12px 'Segoe UI',Arial,sans-serif";
   ctx.fillStyle='rgba(255,255,255,0.32)';
-  ctx.fillText('No actual Gemes Daylers were harmed. The granny is fine too.',W/2,b.y+b.h+68);
+  ctx.fillText('No actual Jemes Tradlors were harmed. The granny is fine too.',W/2,b.y+b.h+68);
 }
 function drawWrapped(str,cx,y,maxW,lh){
   wrapText(str,maxW).forEach(l=>{ctx.fillText(l,cx,y);y+=lh;});
