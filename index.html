@@ -68,7 +68,7 @@ const G={
   animT:0,animKind:'',qte:null,winT:0,winSpeed:70,carDriveX:0,carGone:false,
   confetti:[],puffs:[],texts:[],wheelRot:0,walkPh:0,shake:0,flash:0,
   snapPop:-1,screaming:false,snapPlayed:false,screamPlayed:false,puffTimer:0,
-  line1Shown:false,line2Shown:false,jamesPose:'idle'
+  line1Shown:false,line2Shown:false,JemesPose:'idle'
 };
 
 const clouds=[
@@ -234,7 +234,7 @@ function resetGame(){
   G.winT=0;G.winSpeed=70;G.carGone=false;G.carDriveX=0;
   G.confetti=[];G.puffs=[];G.texts=[];G.wheelRot=0;G.walkPh=0;
   G.shake=0;G.flash=0;G.snapPop=-1;G.screaming=false;
-  G.snapPlayed=false;G.screamPlayed=false;G.jamesPose='idle';
+  G.snapPlayed=false;G.screamPlayed=false;G.JemesPose='idle';
   G.line1Shown=false;G.line2Shown=false;
 }
 function startQTE(){
@@ -248,14 +248,14 @@ function startQTE(){
 }
 function beginWin(){
   G.mode='win';G.modeT=0;G.winT=0;G.winSpeed=70;
-  G.carDriveX=carXAt(1);G.jamesPose='wave';G.puffTimer=0;
+  G.carDriveX=carXAt(1);G.JemesPose='wave';G.puffTimer=0;
   G.line1Shown=false;G.line2Shown=false;
   playEngine();playHonk();
   addText('BEEP BEEP!',carXAt(1),hillY(carXAt(1))-140,'#ffd93b',24);
 }
 function beginSnap(){
   G.mode='snap';G.modeT=0;G.snapPop=-1;G.screaming=false;
-  G.snapPlayed=false;G.screamPlayed=false;G.jamesPose='fallen';G.shake=0;
+  G.snapPlayed=false;G.screamPlayed=false;G.JemesPose='fallen';G.shake=0;
 }
 function successQTE(perfect){
   G.qte.resolved=true;
@@ -266,7 +266,7 @@ function successQTE(perfect){
   G.carFrom=G.carP;
   G.carTo=Math.min(1,G.carP+1/TOTAL_PUSHES);
   G.mode='anim';G.animKind='push';G.animT=0;
-  G.jamesPose='push';G.walkPh=0;
+  G.JemesPose='push';G.walkPh=0;
   G.shake=Math.max(G.shake,perfect?4:2);
   const bp=carPoint(-38,0);
   if(bp)spawnDust(bp[0],bp[1],3);
@@ -279,7 +279,7 @@ function failQTE(msg){
   G.shake=7;
   if(G.hearts<=0){beginSnap();}
   else{
-    G.mode='anim';G.animKind='strain';G.animT=0;G.jamesPose='strain';
+    G.mode='anim';G.animKind='strain';G.animT=0;G.JemesPose='strain';
   }
 }
 function pressQTE(){
@@ -334,10 +334,10 @@ function update(dt){
       G.walkPh+=dt*20;
       if(k>=1){
         if(G.successes>=TOTAL_PUSHES){beginWin();}
-        else{G.jamesPose='idle';startQTE();}
+        else{G.JemesPose='idle';startQTE();}
       }
     }else{
-      if(G.animT>0.6){G.jamesPose='idle';startQTE();}
+      if(G.animT>0.6){G.JemesPose='idle';startQTE();}
     }
   }
   else if(G.mode==='win'){
@@ -569,7 +569,7 @@ function drawCar(t){
   drawWheel(38,-13,15,G.wheelRot);
   ctx.restore();
 }
-function drawJames(t){
+function drawJemes(t){
   const chasingCar=(G.mode==='win'||G.mode==='victory'||G.carGone);
   const cx=chasingCar?carXAt(1):carCenterX();
   const jx=(cx===null?CREST_X-26:cx)-108;
@@ -579,13 +579,13 @@ function drawJames(t){
   ctx.fillStyle='rgba(0,0,0,0.18)';
   ctx.beginPath();ctx.ellipse(0,0,26,6,ga,0,7);ctx.fill();
   ctx.restore();
-  if(G.jamesPose==='fallen'){drawJamesFallen(jx,gy,ga,t);return;}
+  if(G.JemesPose==='fallen'){drawJemesFallen(jx,gy,ga,t);return;}
   let lean=0.38+Math.sin(t*2.2)*0.03;
   let mood='smile',legPh=null;
   if(G.mode==='qte'){lean=0.5;mood='grit';}
-  if(G.jamesPose==='push'){lean=0.62;legPh=G.walkPh;mood='grit';}
-  if(G.jamesPose==='strain'){lean=0.78;mood='grit';}
-  if(G.jamesPose==='wave'){lean=0.06;mood='smile';}
+  if(G.JemesPose==='push'){lean=0.62;legPh=G.walkPh;mood='grit';}
+  if(G.JemesPose==='strain'){lean=0.78;mood='grit';}
+  if(G.JemesPose==='wave'){lean=0.06;mood='smile';}
   const hipX=jx+8,hipY=gy-46;
   const shX=hipX+Math.sin(lean)*36,shY=hipY-Math.cos(lean)*36;
   const hdX=shX+Math.sin(lean+0.18)*14,hdY=shY-Math.cos(lean+0.18)*14;
@@ -594,7 +594,7 @@ function drawJames(t){
     f1x=jx+16+Math.sin(legPh)*9;f1y=gy-Math.max(0,Math.sin(legPh))*5;
     f2x=jx+16-Math.sin(legPh)*9;f2y=gy-Math.max(0,-Math.sin(legPh))*5;
   }
-  if(G.jamesPose==='strain'){f1x=jx+26;f2x=jx-6;}
+  if(G.JemesPose==='strain'){f1x=jx+26;f2x=jx-6;}
   ctx.lineCap='round';ctx.lineJoin='round';
   ctx.strokeStyle='#3a4a6b';ctx.lineWidth=6;
   limb(hipX,hipY,f1x,f1y,-9);
@@ -605,7 +605,7 @@ function drawJames(t){
   ctx.strokeStyle='#4ecdc4';ctx.lineWidth=9;
   ctx.beginPath();ctx.moveTo(hipX,hipY);ctx.lineTo(shX,shY);ctx.stroke();
   ctx.strokeStyle='#f2c29b';ctx.lineWidth=5;
-  if(G.jamesPose==='wave'){
+  if(G.JemesPose==='wave'){
     limb(shX,shY-2,shX+16+Math.sin(t*7)*7,shY-38,4);
     limb(shX,shY+2,shX-10,shY+32,4);
   }else{
@@ -634,7 +634,7 @@ function drawJames(t){
   }
   ctx.restore();
 }
-function drawJamesFallen(jx,gy,ga,t){
+function drawJemesFallen(jx,gy,ga,t){
   ctx.save();
   ctx.translate(jx,gy);ctx.rotate(ga);
   if(G.screaming)ctx.rotate(Math.sin(t*16)*0.02);
@@ -888,7 +888,7 @@ function drawVictory(t){
   yy=drawWrapped('The little old lady toots her horn, asks for his number...',W/2,yy,w-56,26);
   ctx.font="500 17px 'Segoe UI',Arial,sans-serif";
   ctx.fillStyle='#c9d4e3';
-  yy=drawWrapped('James respectfully declined. Tendons: fully intact.',W/2,yy+6,w-56,24);
+  yy=drawWrapped('Jemes respectfully declined. Tendons: fully intact.',W/2,yy+6,w-56,24);
   ctx.font="600 14px 'Segoe UI',Arial,sans-serif";
   ctx.fillStyle='#8a94a8';
   yy=drawWrapped('She took it gracefully. Bridge club awaits.',W/2,yy+4,w-56,20);
@@ -908,7 +908,7 @@ function drawLoseOverlay(t){
   let yy=y+106;
   ctx.font="600 20px 'Segoe UI',Arial,sans-serif";
   ctx.fillStyle='#e8eef7';
-  yy=drawWrapped("James' Achilles tendon snapped like a cheap guitar string.",W/2,yy,w-56,26);
+  yy=drawWrapped("Jemes' Achilles tendon snapped like a cheap guitar string.",W/2,yy,w-56,26);
   ctx.font="500 17px 'Segoe UI',Arial,sans-serif";
   ctx.fillStyle='#c9d4e3';
   yy=drawWrapped('The car remains. The scream echoes still.',W/2,yy+6,w-56,24);
@@ -961,7 +961,7 @@ function draw(){
   drawFlag(t);
   drawPuffs();
   drawCar(t);
-  drawJames(t);
+  drawJemes(t);
   drawTexts();
   if(G.mode==='qte'||G.mode==='anim')drawHUD();
   if(G.mode==='qte')drawQTE(t);
